@@ -14,6 +14,7 @@ const cron = require('node-cron');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Remover HOST fixo - deixar Express decidir
 app.set('trust proxy', 1); // Adicionar trust proxy
 
 // Middleware de validação
@@ -596,16 +597,26 @@ async function downloadVideoForWeb(videoUrl) {
         
         console.log('📥 Iniciando download...');
         
+        // Headers e configurações para evitar detecção de bot
+        const commonArgs = [
+            '--user-agent', '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
+            '--add-header', '"Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"',
+            '--add-header', '"Accept-Language:en-us,en;q=0.5"',
+            '--add-header', '"Sec-Fetch-Mode:navigate"',
+            '--extractor-args', 'youtube:skip=hls',
+            '--no-warnings'
+        ].join(' ');
+
         // Estratégias de download (em ordem de preferência)
         const downloadStrategies = [
-            // Estratégia 1: Melhor qualidade disponível em MP4
-            `${ytDlpCommand} --format "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --output "${outputTemplate}" --no-warnings "${videoUrl}"`,
+            // Estratégia 1: Com headers personalizados e melhor qualidade
+            `${ytDlpCommand} ${commonArgs} --format "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]/best" --output "${outputTemplate}" "${videoUrl}"`,
             
-            // Estratégia 2: Forçar conversão para codecs compatíveis
-            `${ytDlpCommand} --format "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --recode-video mp4 --output "${outputTemplate}" --no-warnings "${videoUrl}"`,
+            // Estratégia 2: Fallback sem restrição de altura
+            `${ytDlpCommand} ${commonArgs} --format "best[ext=mp4]/best" --output "${outputTemplate}" "${videoUrl}"`,
             
-            // Estratégia 3: Download simples com melhor qualidade disponível
-            `${ytDlpCommand} --format "best[ext=mp4]/best" --output "${outputTemplate}" --no-warnings "${videoUrl}"`
+            // Estratégia 3: Download mais agressivo com cookies simulados
+            `${ytDlpCommand} ${commonArgs} --format "worst[ext=mp4]/worst" --output "${outputTemplate}" "${videoUrl}"`
         ];
         
         let downloadSuccess = false;
@@ -754,6 +765,7 @@ process.on('unhandledRejection', (reason, promise) => {
     logger.error('Unhandled Promise Rejection', { reason, promise });
 });
 
+// Remover HOST fixo - deixar Express decidir automaticamente
 const server = app.listen(PORT, () => {
     console.log(`🚀 Servidor rodando na porta ${PORT}`);
     console.log('📁 Interface web disponível!');

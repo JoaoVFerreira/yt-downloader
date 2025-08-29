@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Downloader Foda</title>
+    <link rel="stylesheet" href="fonts/Childhood/Webfont/Childhood-Regular.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #FF7700;
+            font-family: 'Childhood', Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 20px;
+            padding: 40px 20px;
+        }
+
+        .character-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .character-image {
+            width: 450px;
+            height: 450px;
+            background: url(boris_pato_padeiro.png) center/contain no-repeat;
+        }
+
+        .copyright-text {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: #333;
+            text-align: center;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .link-input {
+            background-color: white;
+            border: none;
+            border-radius: 25px;
+            padding: 15px 25px;
+            font-size: 16px;
+            width: 600px;
+            outline: none;
+            color: #FF7700;
+            font-weight: bold;
+            font-family: 'Childhood', Arial, sans-serif;
+        }
+
+        .link-input::placeholder {
+            color: #FF7700;
+            opacity: 0.7;
+            font-family: 'Childhood', Arial, sans-serif;
+            font-size: 18px;
+            letter-spacing: 2px;
+        }
+
+        .ok-button {
+            background-color: #FFEB82;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 26px;
+            color: #FF7700;
+            transition: all 0.3s ease;
+            font-family: 'Childhood', Arial, sans-serif;
+        }
+
+        .ok-button .o-letter {
+            color: #FF0000;
+        }
+
+        .ok-button .k-letter {
+            color: #FF94EB;
+        }
+
+        .ok-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+        }
+
+        .title {
+            font-size: 48px;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .title .letter {
+            display: inline-block;
+        }
+
+        .title .letter:nth-child(1) { color: #76FAFF; }
+        .title .letter:nth-child(2) { color: #77FF00; }
+        .title .letter:nth-child(3) { color: #FF0000; }
+        .title .letter:nth-child(4) { color: #94FFFA; }
+        .title .letter:nth-child(5) { color: #FF94EB; }
+        .title .letter:nth-child(6) { color: #9DFFC9; }
+        .title .letter:nth-child(7) { color: #B3FFFB; }
+        .title .letter:nth-child(8) { color: #C2FF8D; }
+        .title .letter:nth-child(9) { color: #FF0000; }
+        .title .letter:nth-child(10) { color: #76FAFF; }
+        .title .letter:nth-child(11) { color: #77FF00; }
+        .title .letter:nth-child(12) { color: #FF94EB; }
+        .title .letter:nth-child(13) { color: #94FFFA; }
+        .title .letter:nth-child(14) { color: #96F4FF; }
+        .title .letter:nth-child(15) { color: #9DFFC9; }
+        .title .letter:nth-child(16) { color: #B3FFFB; }
+        .title .letter:nth-child(17) { color: #C2FF8D; }
+        .title .letter:nth-child(18) { color: #CB7DFF; }
+        .title .letter:nth-child(19) { color: #76FAFF; }
+        .title .letter:nth-child(20) { color: #FF0000; }
+        .title .letter:nth-child(21) { color: #8AFF7B; }
+
+        @media (max-width: 600px) {
+            .link-input {
+                width: 350px;
+                font-size: 26px;
+                padding: 12px 20px;
+            }
+            
+            .title {
+                font-size: 36px;
+            }
+            
+            .character-image {
+                width: 300px;
+                height: 300px;
+            }
+            
+            .video-info {
+                max-width: 95% !important;
+                padding: 20px 15px !important;
+                margin: 15px 10px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="character-container">
+        <div class="character-image"></div>
+        <div class="copyright-text">
+            Direitos camilísticos reservados<br>
+            de Boris O pato Padeiro
+        </div>
+    </div>
+
+    <div class="input-container">
+        <input type="text" class="link-input" placeholder="LINK" id="videoUrl">
+        <button class="ok-button" id="downloadBtn"><span class="o-letter">O</span><span class="k-letter">K</span></button>
+    </div>
+
+    <div class="video-info" id="videoInfo" style="display: none; background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%); border-radius: 20px; padding: 25px; margin: 20px 0; box-shadow: 0 8px 25px rgba(255, 119, 0, 0.15); border: 2px solid #FFEB82; max-width: 800px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <h3 style="color: #FF7700; font-family: 'Childhood', Arial, sans-serif; font-size: 24px; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.1);">🎬 Informações do Vídeo</h3>
+        </div>
+        <div id="videoDetails"></div>
+    </div>
+
+    <div class="download-section" id="downloadSection" style="display: none; text-align: center; margin: 20px 0;">
+        <button class="download-file-btn" id="downloadFileBtn" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border: none; border-radius: 15px; padding: 15px 30px; font-size: 16px; font-weight: bold; cursor: pointer; font-family: 'Childhood', Arial, sans-serif;">
+            💾 Baixar Arquivo
+        </button>
+    </div>
+
+    <div class="progress" id="progressContainer" style="display: none; margin: 20px 0; background: white; border-radius: 15px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        <div style="width: 100%; height: 25px; background: #e0e0e0; border-radius: 15px; overflow: hidden; margin-bottom: 20px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
+            <div id="progressFill" style="height: 100%; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); width: 0%; transition: width 0.8s ease; border-radius: 15px;"></div>
+        </div>
+        <div id="progressText" style="text-align: center; color: #333; font-size: 18px; font-family: 'Childhood', Arial, sans-serif; font-weight: bold; margin-bottom: 10px; text-shadow: 1px 1px 2px rgba(0,0,0,0.1);">Preparando download...</div>
+        <div id="statusText" style="text-align: center; color: #666; font-size: 14px; font-family: 'Childhood', Arial, sans-serif; margin-top: 10px;">Aguardando...</div>
+    </div>
+
+    <div class="result" id="result" style="display: none; margin: 20px 0; padding: 20px; border-radius: 10px; text-align: center; font-family: 'Childhood', Arial, sans-serif;"></div>
+
+    <div class="title">
+        <span class="letter">V</span>
+        <span class="letter">I</span>
+        <span class="letter">D</span>
+        <span class="letter">E</span>
+        <span class="letter">O</span>
+        <span class="letter"> </span>
+        <span class="letter">D</span>
+        <span class="letter">O</span>
+        <span class="letter">W</span>
+        <span class="letter">N</span>
+        <span class="letter">L</span>
+        <span class="letter">O</span>
+        <span class="letter">A</span>
+        <span class="letter">D</span>
+        <span class="letter">E</span>
+        <span class="letter">R</span>
+        <span class="letter"> </span>
+        <span class="letter">F</span>
+        <span class="letter">O</span>
+        <span class="letter">D</span>
+        <span class="letter">A</span>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -519,8 +519,31 @@ app.post('/cleanup-file', (req, res) => {
     }
 });
 
-// FUNÇÃO MODIFICADA: Usar yt-dlp via Python
 async function downloadVideoForWeb(videoUrl) {
+    console.log('Verificando URL do vídeo...');
+    
+    try {
+        // Primeira tentativa: yt-dlp (método atual)
+        console.log('Tentando download via yt-dlp...');
+        return await downloadViaYtDlp(videoUrl);
+    } catch (error) {
+        console.log('yt-dlp falhou:', error.message);
+        
+        // Se foi erro de bot detection, tenta Invidious
+        if (error.message.includes('Sign in to confirm') || 
+            error.message.includes('bot') || 
+            error.message.includes('age')) {
+            
+            console.log('Tentando download via Invidious...');
+            return await downloadViaInvidious(videoUrl);
+        } else {
+            // Outros erros não relacionados a bloqueio
+            throw error;
+        }
+    }
+}
+
+async function downloadViaYtDlp(videoUrl) {
     const fs = require('fs');
     const path = require('path');
     const { exec } = require('child_process');
@@ -531,187 +554,245 @@ async function downloadVideoForWeb(videoUrl) {
         return filename.replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, ' ').trim();
     }
     
-    console.log('🔍 Verificando URL do vídeo...');
-    console.log('📋 Usando yt-dlp via Python para download...');
+    const downloadsDir = path.join(__dirname, 'downloads');
     
-    try {
-        const downloadsDir = path.join(__dirname, 'downloads');
-        
-        if (!fs.existsSync(downloadsDir)) {
-            fs.mkdirSync(downloadsDir, { recursive: true });
-        }
-        
-        // Detectar se estamos em produção (Render) ou desenvolvimento
-        const isProduction = process.env.NODE_ENV === 'production';
-        let ytDlpCommand;
-        
-        if (isProduction) {
-            // Debug do ambiente
-            console.log('🔍 Debugando ambiente Python...');
-            
-            // Tentar diferentes comandos yt-dlp
-            const ytdlpOptions = ['yt-dlp', 'python3 -m yt_dlp', '/opt/venv/bin/yt-dlp'];
-            
-            for (const cmd of ytdlpOptions) {
-                try {
-                    const { stdout } = await execAsync(`${cmd} --version`, { timeout: 5000 });
-                    ytDlpCommand = cmd;
-                    console.log(`✅ yt-dlp encontrado via: ${cmd}`);
-                    console.log(`📋 Versão: ${stdout.trim()}`);
-                    break;
-                } catch (e) {
-                    console.log(`❌ Tentativa falhou: ${cmd}`);
-                }
-            }
-            
-            if (!ytDlpCommand) {
-                throw new Error('yt-dlp não encontrado em nenhuma localização');
-            }
-        } else {
-            ytDlpCommand = './yt-dlp';
-        }
-        
-        console.log(`🔧 Usando comando: ${ytDlpCommand}`);
-        
-        // Primeiro, obter informações do vídeo usando yt-dlp
-        console.log('📋 Obtendo informações do vídeo...');
-        const infoCommand = `${ytDlpCommand} --dump-single-json --no-warnings "${videoUrl}"`;
-        
-        const { stdout: infoOutput } = await execAsync(infoCommand, {
-            cwd: downloadsDir,
-            timeout: 30000
-        });
-        
-        const info = JSON.parse(infoOutput);
-        
-        if (!info) {
-            throw new Error('Não foi possível obter informações do vídeo');
-        }
-        
-        console.log(`🎬 Título: ${info.title}`);
-        console.log(`👤 Autor: ${info.uploader || info.channel || 'N/A'}`);
-        console.log(`⏱️ Duração: ${info.duration}s`);
-        
-        const sanitizedTitle = sanitizeFilename(info.title) || `video_${info.id}_${Date.now()}`;
-        const outputTemplate = `${sanitizedTitle}.%(ext)s`;
-        
-        console.log('📥 Iniciando download...');
-        
-        // Headers e configurações para evitar detecção de bot
-        const commonArgs = [
-            '--user-agent', '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
-            '--add-header', '"Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"',
-            '--add-header', '"Accept-Language:en-us,en;q=0.5"',
-            '--add-header', '"Sec-Fetch-Mode:navigate"',
-            '--extractor-args', 'youtube:skip=hls',
-            '--no-warnings'
-        ].join(' ');
-
-        // Estratégias de download (em ordem de preferência)
-        const downloadStrategies = [
-            // Estratégia 1: Com headers personalizados e melhor qualidade
-            `${ytDlpCommand} ${commonArgs} --format "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]/best" --output "${outputTemplate}" "${videoUrl}"`,
-            
-            // Estratégia 2: Fallback sem restrição de altura
-            `${ytDlpCommand} ${commonArgs} --format "best[ext=mp4]/best" --output "${outputTemplate}" "${videoUrl}"`,
-            
-            // Estratégia 3: Download mais agressivo com cookies simulados
-            `${ytDlpCommand} ${commonArgs} --format "worst[ext=mp4]/worst" --output "${outputTemplate}" "${videoUrl}"`
-        ];
-        
-        let downloadSuccess = false;
-        let lastError = null;
-        
-        for (let i = 0; i < downloadStrategies.length; i++) {
-            try {
-                console.log(`Tentativa ${i + 1}/${downloadStrategies.length} de download...`);
-                
-                // Adicionar delay entre tentativas para evitar rate limiting
-                if (i > 0) {
-                    console.log('Aguardando antes da próxima tentativa...');
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
-                
-                await execAsync(downloadStrategies[i], {
-                    cwd: downloadsDir,
-                    timeout: 300000 // 5 minutos
-                });
-                downloadSuccess = true;
-                console.log(`Download bem-sucedido na tentativa ${i + 1}`);
-                break;
-            } catch (error) {
-                lastError = error;
-                console.log(`Tentativa ${i + 1} falhou: ${error.message}`);
-                if (i < downloadStrategies.length - 1) {
-                    console.log('Tentando estratégia alternativa...');
-                }
-            }
-        }
-        
-        if (!downloadSuccess) {
-            throw lastError || new Error('Todas as estratégias de download falharam');
-        }
-        
-        // Encontrar o arquivo baixado
-        const files = fs.readdirSync(downloadsDir)
-            .filter(file => file.startsWith(sanitizedTitle))
-            .sort((a, b) => {
-                const statA = fs.statSync(path.join(downloadsDir, a));
-                const statB = fs.statSync(path.join(downloadsDir, b));
-                return statB.mtime - statA.mtime;
-            });
-        
-        if (files.length === 0) {
-            throw new Error('Arquivo de vídeo não foi criado');
-        }
-        
-        const downloadedFile = files[0];
-        const downloadedPath = path.join(downloadsDir, downloadedFile);
-        
-        // Verificar se o arquivo foi criado corretamente
-        if (!fs.existsSync(downloadedPath) || fs.statSync(downloadedPath).size === 0) {
-            throw new Error('Arquivo não foi criado ou está vazio');
-        }
-        
-        console.log('✅ Download concluído!');
-        
-        // Formatar duração
-        const duration = parseInt(info.duration) || 0;
-        const minutes = Math.floor(duration / 60);
-        const seconds = duration % 60;
-        const durationString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-        
-        return {
-            filename: downloadedFile,
-            videoInfo: {
-                title: info.title,
-                author: info.uploader || info.channel || 'N/A',
-                duration: durationString,
-                views: info.view_count ? parseInt(info.view_count).toLocaleString() : 'N/A',
-                quality: info.height ? `${info.height}p` : 'N/A'
-            }
-        };
-        
-    } catch (error) {
-        console.error('❌ Erro durante o download:', error.message);
-        
-        let errorMessage = 'Erro ao processar vídeo';
-        if (error.message.includes('Video unavailable') || error.message.includes('Private video')) {
-            errorMessage = 'Vídeo não disponível ou privado';
-        } else if (error.message.includes('Sign in to confirm') || error.message.includes('age')) {
-            errorMessage = 'Vídeo requer confirmação de idade';
-        } else if (error.message.includes('This video is not available') || error.message.includes('removed')) {
-            errorMessage = 'Este vídeo não está disponível';
-        } else if (error.message.includes('network') || error.message.includes('timeout') || error.message.includes('Connection')) {
-            errorMessage = 'Erro de rede durante o download';
-        } else if (error.message.includes('format') || error.message.includes('No video formats')) {
-            errorMessage = 'Formato de vídeo não suportado';
-        } else if (error.message.includes('Command failed')) {
-            errorMessage = 'Erro ao executar yt-dlp. Verifique se está instalado';
-        }
-        
-        throw new Error(errorMessage);
+    if (!fs.existsSync(downloadsDir)) {
+        fs.mkdirSync(downloadsDir, { recursive: true });
     }
+    
+    // Detectar comando yt-dlp
+    const isProduction = process.env.NODE_ENV === 'production';
+    let ytDlpCommand;
+    
+    if (isProduction) {
+        const ytdlpOptions = ['yt-dlp', 'python3 -m yt_dlp', '/opt/venv/bin/yt-dlp'];
+        
+        for (const cmd of ytdlpOptions) {
+            try {
+                await execAsync(`${cmd} --version`, { timeout: 5000 });
+                ytDlpCommand = cmd;
+                console.log(`yt-dlp encontrado via: ${cmd}`);
+                break;
+            } catch (e) {
+                continue;
+            }
+        }
+        
+        if (!ytDlpCommand) {
+            throw new Error('yt-dlp não encontrado');
+        }
+    } else {
+        ytDlpCommand = './yt-dlp';
+    }
+    
+    // Obter informações do vídeo
+    console.log('Obtendo informações do vídeo...');
+    const infoCommand = `${ytDlpCommand} --dump-single-json --no-warnings "${videoUrl}"`;
+    
+    const { stdout: infoOutput } = await execAsync(infoCommand, {
+        cwd: downloadsDir,
+        timeout: 30000
+    });
+    
+    const info = JSON.parse(infoOutput);
+    if (!info) throw new Error('Não foi possível obter informações do vídeo');
+    
+    console.log(`Título: ${info.title}`);
+    console.log(`Autor: ${info.uploader || info.channel || 'N/A'}`);
+    
+    const sanitizedTitle = sanitizeFilename(info.title) || `video_${info.id}_${Date.now()}`;
+    const outputTemplate = `${sanitizedTitle}.%(ext)s`;
+    
+    // Headers anti-bot
+    const commonArgs = [
+        '--user-agent', '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"',
+        '--add-header', '"Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"',
+        '--no-warnings'
+    ].join(' ');
+    
+    // Estratégias de download
+    const downloadStrategies = [
+        `${ytDlpCommand} ${commonArgs} --format "best[ext=mp4][height<=1080]/best" --output "${outputTemplate}" "${videoUrl}"`,
+        `${ytDlpCommand} ${commonArgs} --format "worst[ext=mp4]/worst" --output "${outputTemplate}" "${videoUrl}"`
+    ];
+    
+    let downloadSuccess = false;
+    let lastError = null;
+    
+    for (let i = 0; i < downloadStrategies.length; i++) {
+        try {
+            console.log(`Tentativa ${i + 1}/${downloadStrategies.length}...`);
+            
+            if (i > 0) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+            
+            await execAsync(downloadStrategies[i], {
+                cwd: downloadsDir,
+                timeout: 300000
+            });
+            
+            downloadSuccess = true;
+            console.log(`Download bem-sucedido na tentativa ${i + 1}`);
+            break;
+        } catch (error) {
+            lastError = error;
+            console.log(`Tentativa ${i + 1} falhou`);
+        }
+    }
+    
+    if (!downloadSuccess) {
+        throw lastError || new Error('Todas as estratégias falharam');
+    }
+    
+    // Encontrar arquivo baixado
+    const files = fs.readdirSync(downloadsDir)
+        .filter(file => file.startsWith(sanitizedTitle))
+        .sort((a, b) => fs.statSync(path.join(downloadsDir, b)).mtime - fs.statSync(path.join(downloadsDir, a)).mtime);
+    
+    if (files.length === 0) {
+        throw new Error('Arquivo não foi criado');
+    }
+    
+    const downloadedFile = files[0];
+    const downloadedPath = path.join(downloadsDir, downloadedFile);
+    
+    if (!fs.existsSync(downloadedPath) || fs.statSync(downloadedPath).size === 0) {
+        throw new Error('Arquivo vazio ou corrompido');
+    }
+    
+    // Formatar duração
+    const duration = parseInt(info.duration) || 0;
+    const minutes = Math.floor(duration / 60);
+    const seconds = duration % 60;
+    const durationString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    return {
+        filename: downloadedFile,
+        videoInfo: {
+            title: info.title,
+            author: info.uploader || info.channel || 'N/A',
+            duration: durationString,
+            views: info.view_count ? parseInt(info.view_count).toLocaleString() : 'N/A',
+            quality: info.height ? `${info.height}p` : 'N/A',
+            method: 'yt-dlp'
+        }
+    };
+}
+
+async function downloadViaInvidious(videoUrl) {
+    const fs = require('fs');
+    const path = require('path');
+    
+    function sanitizeFilename(filename) {
+        return filename.replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, ' ').trim();
+    }
+    
+    function formatDuration(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    const videoId = extractVideoId(videoUrl);
+    if (!videoId) throw new Error('URL inválida');
+    
+    const instances = [
+        'https://yewtu.be',
+        'https://invidious.kavin.rocks',
+        'https://invidious.io',
+        'https://inv.riverside.rocks'
+    ];
+    
+    const downloadsDir = path.join(__dirname, 'downloads');
+    if (!fs.existsSync(downloadsDir)) {
+        fs.mkdirSync(downloadsDir, { recursive: true });
+    }
+    
+    for (const instance of instances) {
+        try {
+            console.log(`Tentando instância: ${instance}`);
+            
+            // Obter dados do vídeo
+            const response = await fetch(`${instance}/api/v1/videos/${videoId}`, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                },
+                timeout: 10000
+            });
+            
+            if (!response.ok) continue;
+            
+            const data = await response.json();
+            
+            if (data.error) {
+                console.log(`Erro da API: ${data.error}`);
+                continue;
+            }
+            
+            // Escolher melhor formato disponível
+            let format = data.formatStreams?.find(f => 
+                f.container === 'mp4' && f.qualityLabel && parseInt(f.qualityLabel) <= 720
+            );
+            
+            // Fallback para qualquer formato MP4
+            if (!format) {
+                format = data.formatStreams?.find(f => f.container === 'mp4');
+            }
+            
+            if (!format) {
+                console.log('Nenhum formato MP4 disponível nesta instância');
+                continue;
+            }
+            
+            console.log(`Formato selecionado: ${format.qualityLabel || 'N/A'}`);
+            
+            // Download direto
+            const videoResponse = await fetch(format.url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            });
+            
+            if (!videoResponse.ok) {
+                console.log(`Falha no download: ${videoResponse.status}`);
+                continue;
+            }
+            
+            const buffer = await videoResponse.arrayBuffer();
+            
+            // Salvar arquivo
+            const filename = `${sanitizeFilename(data.title)}.mp4`;
+            const filepath = path.join(downloadsDir, filename);
+            fs.writeFileSync(filepath, Buffer.from(buffer));
+            
+            console.log('Download via Invidious concluído');
+            
+            return {
+                filename,
+                videoInfo: {
+                    title: data.title,
+                    author: data.author,
+                    duration: formatDuration(data.lengthSeconds),
+                    views: data.viewCount ? parseInt(data.viewCount).toLocaleString() : 'N/A',
+                    quality: format.qualityLabel || 'N/A',
+                    method: 'Invidious'
+                }
+            };
+            
+        } catch (error) {
+            console.log(`Instância ${instance} falhou: ${error.message}`);
+            continue;
+        }
+    }
+    
+    throw new Error('Todas as instâncias Invidious falharam');
+}
+
+function extractVideoId(youtubeUrl) {
+    const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/;
+    const match = youtubeUrl.match(regex);
+    return match ? match[1] : null;
 }
 
 app.get('/health', (_, res) => {

@@ -699,6 +699,9 @@ async function downloadViaInvidious(videoUrl) {
     
     const instances = [
         'https://yewtu.be',
+        'https://invidious.nerdvpn.de',
+        'https://inv.nadeko.net',
+        'https://invidious.f5.si',
         'https://invidious.kavin.rocks',
         'https://invidious.io',
         'https://inv.riverside.rocks'

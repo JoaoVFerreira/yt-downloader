@@ -624,19 +624,26 @@ async function downloadVideoForWeb(videoUrl) {
         
         for (let i = 0; i < downloadStrategies.length; i++) {
             try {
-                console.log(`📥 Tentativa ${i + 1}/${downloadStrategies.length} de download...`);
+                console.log(`Tentativa ${i + 1}/${downloadStrategies.length} de download...`);
+                
+                // Adicionar delay entre tentativas para evitar rate limiting
+                if (i > 0) {
+                    console.log('Aguardando antes da próxima tentativa...');
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+                
                 await execAsync(downloadStrategies[i], {
                     cwd: downloadsDir,
                     timeout: 300000 // 5 minutos
                 });
                 downloadSuccess = true;
-                console.log(`✅ Download bem-sucedido na tentativa ${i + 1}`);
+                console.log(`Download bem-sucedido na tentativa ${i + 1}`);
                 break;
             } catch (error) {
                 lastError = error;
-                console.log(`⚠️  Tentativa ${i + 1} falhou: ${error.message}`);
+                console.log(`Tentativa ${i + 1} falhou: ${error.message}`);
                 if (i < downloadStrategies.length - 1) {
-                    console.log('🔄 Tentando estratégia alternativa...');
+                    console.log('Tentando estratégia alternativa...');
                 }
             }
         }

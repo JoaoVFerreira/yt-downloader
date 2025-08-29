@@ -14,10 +14,9 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-venv \
     ffmpeg \
-    --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
-
+    chromium-browser \
+    --no-install-recommends
+    
 # Instalar yt-dlp usando --break-system-packages (seguro em container)
 RUN python3 -m pip install --no-cache-dir --break-system-packages yt-dlp
 

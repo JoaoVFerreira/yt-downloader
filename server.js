@@ -13,10 +13,8 @@ const cron = require('node-cron');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '127.0.0.1';
 
-const isProduction = process.env.NODE_ENV === 'production';
-const ytDlpCommand = isProduction ? 'python3 -m yt_dlp' : './yt-dlp';
+app.set('trust proxy', 1); // Adicionar trust proxy
 
 // Middleware de validação
 const validateRequiredEnv = () => {
@@ -59,8 +57,6 @@ if (process.env.NODE_ENV !== 'production') {
         format: winston.format.simple()
     }));
 }
-
-app.set('trust proxy', 1);
 
 const logsDir = path.join(__dirname, 'logs');
 if (!fs.existsSync(logsDir)) {
@@ -522,6 +518,7 @@ app.post('/cleanup-file', (req, res) => {
     }
 });
 
+// FUNÇÃO MODIFICADA: Usar yt-dlp via Python
 async function downloadVideoForWeb(videoUrl) {
     const fs = require('fs');
     const path = require('path');
@@ -542,9 +539,42 @@ async function downloadVideoForWeb(videoUrl) {
         if (!fs.existsSync(downloadsDir)) {
             fs.mkdirSync(downloadsDir, { recursive: true });
         }
+        
+        // Detectar se estamos em produção (Render) ou desenvolvimento
+        const isProduction = process.env.NODE_ENV === 'production';
+        let ytDlpCommand;
+        
+        if (isProduction) {
+            // Debug do ambiente
+            console.log('🔍 Debugando ambiente Python...');
+            
+            // Tentar diferentes comandos yt-dlp
+            const ytdlpOptions = ['yt-dlp', 'python3 -m yt_dlp', '/opt/venv/bin/yt-dlp'];
+            
+            for (const cmd of ytdlpOptions) {
+                try {
+                    const { stdout } = await execAsync(`${cmd} --version`, { timeout: 5000 });
+                    ytDlpCommand = cmd;
+                    console.log(`✅ yt-dlp encontrado via: ${cmd}`);
+                    console.log(`📋 Versão: ${stdout.trim()}`);
+                    break;
+                } catch (e) {
+                    console.log(`❌ Tentativa falhou: ${cmd}`);
+                }
+            }
+            
+            if (!ytDlpCommand) {
+                throw new Error('yt-dlp não encontrado em nenhuma localização');
+            }
+        } else {
+            ytDlpCommand = './yt-dlp';
+        }
+        
+        console.log(`🔧 Usando comando: ${ytDlpCommand}`);
+        
         // Primeiro, obter informações do vídeo usando yt-dlp
         console.log('📋 Obtendo informações do vídeo...');
-        const infoCommand = `"${ytDlpCommand}" --dump-single-json --no-warnings "${videoUrl}"`;
+        const infoCommand = `${ytDlpCommand} --dump-single-json --no-warnings "${videoUrl}"`;
         
         const { stdout: infoOutput } = await execAsync(infoCommand, {
             cwd: downloadsDir,
@@ -569,13 +599,13 @@ async function downloadVideoForWeb(videoUrl) {
         // Estratégias de download (em ordem de preferência)
         const downloadStrategies = [
             // Estratégia 1: Melhor qualidade disponível em MP4
-            `"${ytDlpPath}" --format "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --output "${outputTemplate}" --no-warnings "${videoUrl}"`,
+            `${ytDlpCommand} --format "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --output "${outputTemplate}" --no-warnings "${videoUrl}"`,
             
             // Estratégia 2: Forçar conversão para codecs compatíveis
-            `"${ytDlpPath}" --format "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --recode-video mp4 --output "${outputTemplate}" --no-warnings "${videoUrl}"`,
+            `${ytDlpCommand} --format "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --recode-video mp4 --output "${outputTemplate}" --no-warnings "${videoUrl}"`,
             
             // Estratégia 3: Download simples com melhor qualidade disponível
-            `"${ytDlpPath}" --format "best[ext=mp4]/best" --output "${outputTemplate}" --no-warnings "${videoUrl}"`
+            `${ytDlpCommand} --format "best[ext=mp4]/best" --output "${outputTemplate}" --no-warnings "${videoUrl}"`
         ];
         
         let downloadSuccess = false;
@@ -724,9 +754,9 @@ process.on('unhandledRejection', (reason, promise) => {
     logger.error('Unhandled Promise Rejection', { reason, promise });
 });
 
-const server = app.listen(PORT, HOST, () => {
-    console.log(`🚀 Servidor HTTP rodando em http://${HOST}:${PORT}`);
-    console.log('📁 Interface web disponível no navegador!');
+const server = app.listen(PORT, () => {
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+    console.log('📁 Interface web disponível!');
     console.log('🛡️  Segurança habilitada: Rate limiting, Helmet, Validação');
     console.log('📊 Logs estruturados habilitados');
     

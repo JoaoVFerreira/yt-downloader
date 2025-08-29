@@ -15,6 +15,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
 
+const isProduction = process.env.NODE_ENV === 'production';
+const ytDlpCommand = isProduction ? 'python3 -m yt_dlp' : './yt-dlp';
+
 // Middleware de validação
 const validateRequiredEnv = () => {
     const required = ['NODE_ENV'];
@@ -57,7 +60,7 @@ if (process.env.NODE_ENV !== 'production') {
     }));
 }
 
-app.set('trust proxy', process.env.TRUST_PROXY === 'true');
+app.set('trust proxy', 1);
 
 const logsDir = path.join(__dirname, 'logs');
 if (!fs.existsSync(logsDir)) {
@@ -539,11 +542,9 @@ async function downloadVideoForWeb(videoUrl) {
         if (!fs.existsSync(downloadsDir)) {
             fs.mkdirSync(downloadsDir, { recursive: true });
         }
-        
         // Primeiro, obter informações do vídeo usando yt-dlp
         console.log('📋 Obtendo informações do vídeo...');
-        const ytDlpPath = path.join(__dirname, 'yt-dlp');
-        const infoCommand = `"${ytDlpPath}" --dump-single-json --no-warnings "${videoUrl}"`;
+        const infoCommand = `"${ytDlpCommand}" --dump-single-json --no-warnings "${videoUrl}"`;
         
         const { stdout: infoOutput } = await execAsync(infoCommand, {
             cwd: downloadsDir,
